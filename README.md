@@ -1,185 +1,234 @@
 -- =============================================
--- RENAN.mod | FZ - Pequenos Impérios (Tiny Empires)
--- Auto Farm + Menu (Toggle: K)
+-- RENAN.mod | Pequenos Impérios (Tiny Empires)
+-- Auto Farm + Menu (Tecla K)
 -- =============================================
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 local Workspace = game.Workspace
 
 local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
 
 -- ================== CONFIGURAÇÕES ==================
 local CONFIG = {
-    AutoCollectFarm = true,   -- Coletar da fazenda
-    AutoSell = true,          -- Vender recursos
-    AutoBuild = true,         -- Construir
-    AutoAssignWorkers = true, -- Atribuir trabalhadores
-    AutoPullGold = true,      -- Puxar ouro / coletar recursos
-    BuildDelay = 0.8,
-    SellDelay = 10,
+    AutoCollectFarm = true,     -- Coleta Automática (Fazenda)
+    AutoPullGold = true,        -- Puxar Ouro / Recursos
+    AutoBuild = true,
+    AutoAssignWorkers = true,
+    AutoSell = true,
+    BuildDelay = 0.75,
+    SellDelay = 12,
     MaxBuildings = 25,
-    Priority = {"Fazenda", "Farm", "Mina", "Casa", "Quartel", "Workshop"},
-    MaxPerType = { Fazenda = 10, Farm = 10, Mina = 8, Casa = 6, Quartel = 4 }
+    Priority = {"Fazenda", "Farm", "Mina", "Casa", "Quartel", "Workshop", "Mina de Prata", "Mina de Cobre"}
 }
 
--- ================== REMOTES (melhor detecção) ==================
+-- ================== REMOTES ==================
 local function GetRemote(name)
-    return ReplicatedStorage:FindFirstChild(name, true) 
-        or (ReplicatedStorage:FindFirstChild("Remotes") and ReplicatedStorage.Remotes:FindFirstChild(name))
-        or ReplicatedStorage:FindFirstChild(name)
-end
-
--- ================== POSIÇÃO PARA CONSTRUIR ==================
-local function GetFreePosition()
-    local base = player:FindFirstChild("Base") 
-        or Workspace:FindFirstChild("Bases") and Workspace.Bases:FindFirstChild(player.Name)
-        or player:FindFirstChild("Plot") or Workspace.Terrain
-    
-    local origin = (base and base:IsA("BasePart")) and base.Position or Vector3.new(0, 20, 0)
-    return origin + Vector3.new(math.random(-35, 35), 10, math.random(-35, 35))
+    local rem = ReplicatedStorage:FindFirstChild(name, true)
+    if rem then return rem end
+    local remotesFolder = ReplicatedStorage:FindFirstChild("Remotes") or ReplicatedStorage:FindFirstChild("RemoteEvents")
+    if remotesFolder then
+        return remotesFolder:FindFirstChild(name) or remotesFolder:FindFirstChild(name:lower())
+    end
+    return nil
 end
 
 -- ================== FUNÇÕES ==================
-
--- Coletar da Fazenda
 local function AutoCollectFarm()
     if not CONFIG.AutoCollectFarm then return end
-    local remote = GetRemote("Collect") or GetRemote("Harvest") or GetRemote("CollectFarm") or GetRemote("CollectResource")
+    local remote = GetRemote("Collect") or GetRemote("Harvest") or GetRemote("CollectFarm") or GetRemote("FarmCollect")
     if remote then
-        for _, farm in ipairs(Workspace:GetDescendants()) do
-            if farm.Name:match("Farm") or farm.Name:match("Fazenda") then
-                pcall(function()
-                    remote:FireServer(farm)
-                end)
+        for _, obj in ipairs(Workspace:GetDescendants()) do
+            if obj.Name:find("Farm") or obj.Name:find("Fazenda") or obj.Name:find("Plant") then
+                pcall(function() remote:FireServer(obj) end)
             end
         end
     end
 end
 
--- Puxar Ouro / Coletar Recursos
 local function AutoPullGold()
     if not CONFIG.AutoPullGold then return end
-    local remote = GetRemote("CollectGold") or GetRemote("ClaimGold") or GetRemote("CollectAll") or GetRemote("HarvestAll")
+    local remote = GetRemote("Claim") or GetRemote("CollectGold") or GetRemote("CollectAll") or GetRemote("HarvestAll") or GetRemote("Pickup")
     if remote then
         pcall(function() remote:FireServer() end)
     end
 end
 
--- Construir
 local function AutoBuild()
     if not CONFIG.AutoBuild then return end
-    local remote = GetRemote("PlaceBuilding") or GetRemote("Build") or GetRemote("BuildStructure") or GetRemote("BuyBuilding")
+    local remote = GetRemote("PlaceBuilding") or GetRemote("Build") or GetRemote("BuyBuilding") or GetRemote("Construct")
     if not remote then return end
 
     local count = 0
-    for _, buildingType in ipairs(CONFIG.Priority) do
+    for _, bType in ipairs(CONFIG.Priority) do
         if count >= CONFIG.MaxBuildings then break end
-        local pos = GetFreePosition()
-        pcall(function()
-            remote:FireServer(buildingType, pos)
-        end)
+        local pos = Vector3.new(math.random(-60,60), 15, math.random(-60,60)) -- Ajuste conforme seu plot
+        pcall(function() remote:FireServer(bType, pos) end)
         count += 1
         task.wait(CONFIG.BuildDelay)
     end
 end
 
--- Atribuir Trabalhadores
 local function AutoAssignWorkers()
     if not CONFIG.AutoAssignWorkers then return end
-    local remote = GetRemote("AssignWorker") or GetRemote("SetWorkers") or GetRemote("Assign")
+    local remote = GetRemote("AssignWorker") or GetRemote("SetWorker") or GetRemote("Assign")
     if not remote then return end
 
     for _, building in ipairs(Workspace:GetDescendants()) do
         if building:FindFirstChild("Owner") and building.Owner.Value == player then
-            pcall(function()
-                remote:FireServer(building, "max") -- ou "full"
-            end)
+            pcall(function() remote:FireServer(building, "max") end)
         end
     end
 end
 
--- Vender
 local function AutoSell()
     if not CONFIG.AutoSell then return end
-    local remote = GetRemote("Sell") or GetRemote("SellResources") or GetRemote("SellAll") or GetRemote("MarketSell")
+    local remote = GetRemote("Sell") or GetRemote("SellAll") or GetRemote("SellResources") or GetRemote("MarketSell")
     if remote then
         pcall(function() remote:FireServer("all") end)
     end
 end
 
--- ================== GUI (mesma de antes, só adicionei toggles) ==================
+-- ================== GUI COMPLETA ==================
 local gui = Instance.new("ScreenGui")
-gui.Name = "RENAN_FZ"
+gui.Name = "RENAN_PequenosImperios"
 gui.ResetOnSpawn = false
 gui.Parent = player:WaitForChild("PlayerGui")
 
--- Cores
-local RED = Color3.fromRGB(200, 25, 35)
-local RED_DARK = Color3.fromRGB(120, 10, 18)
-local BG = Color3.fromRGB(20, 20, 22)
-local BG2 = Color3.fromRGB(30, 30, 33)
-local TEXT = Color3.fromRGB(240, 240, 240)
+local RED = Color3.fromRGB(220, 30, 40)
+local RED_DARK = Color3.fromRGB(140, 15, 25)
+local BG = Color3.fromRGB(22, 22, 25)
+local BG2 = Color3.fromRGB(32, 32, 37)
+local TEXT = Color3.fromRGB(245, 245, 245)
 
--- (O resto da GUI fica igual ao seu código original - só adicionei os toggles novos)
+local main = Instance.new("Frame")
+main.Size = UDim2.new(0, 340, 0, 420)
+main.Position = UDim2.new(0.5, -170, 0.5, -210)
+main.BackgroundColor3 = BG
+main.BorderSizePixel = 0
+main.Active = true
+main.Draggable = true
+main.Parent = gui
+Instance.new("UICorner", main).CornerRadius = UDim.new(0, 12)
 
-local main = Instance.new("Frame") -- ... (copie o resto da sua GUI aqui)
+local stroke = Instance.new("UIStroke", main)
+stroke.Color = RED
+stroke.Thickness = 2.5
 
--- Container
-local body = Instance.new("Frame", main) -- ... (manter igual)
+-- Header
+local header = Instance.new("Frame", main)
+header.Size = UDim2.new(1, 0, 0, 40)
+header.BackgroundColor3 = RED_DARK
+header.BorderSizePixel = 0
+Instance.new("UICorner", header).CornerRadius = UDim.new(0, 12)
 
-local list = Instance.new("UIListLayout", body)
+local title = Instance.new("TextLabel", header)
+title.Size = UDim2.new(1, -100, 1, 0)
+title.Position = UDim2.new(0, 15, 0, 0)
+title.BackgroundTransparency = 1
+title.Text = "RENAN.mod | Pequenos Impérios"
+title.TextColor3 = TEXT
+title.Font = Enum.Font.GothamBold
+title.TextSize = 16
+title.TextXAlignment = Enum.TextXAlignment.Left
+
+local closeBtn = Instance.new("TextButton", header)
+closeBtn.Size = UDim2.new(0, 32, 0, 32)
+closeBtn.Position = UDim2.new(1, -38, 0, 4)
+closeBtn.BackgroundColor3 = RED
+closeBtn.Text = "✕"
+closeBtn.TextColor3 = TEXT
+closeBtn.Font = Enum.Font.GothamBold
+Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 8)
+
+-- Body
+local body = Instance.new("Frame", main)
+body.Position = UDim2.new(0, 15, 0, 50)
+body.Size = UDim2.new(1, -30, 1, -90)
+body.BackgroundTransparency = 1
+
+local listLayout = Instance.new("UIListLayout", body)
+listLayout.Padding = UDim.new(0, 10)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
 local function makeToggle(text, key)
-    local f = Instance.new("Frame", body)
-    f.BackgroundColor3 = BG2
-    f.Size = UDim2.new(1, 0, 0, 38)
-    Instance.new("UICorner", f).CornerRadius = UDim.new(0, 6)
+    local frame = Instance.new("Frame", body)
+    frame.Size = UDim2.new(1, 0, 0, 42)
+    frame.BackgroundColor3 = BG2
+    Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
 
-    local lbl = Instance.new("TextLabel", f)
-    lbl.BackgroundTransparency = 1
-    lbl.Size = UDim2.new(1, -70, 1, 0)
-    lbl.Position = UDim2.new(0, 12, 0, 0)
-    lbl.Text = text
-    lbl.TextColor3 = TEXT
-    lbl.Font = Enum.Font.Gotham
-    lbl.TextSize = 14
-    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    local label = Instance.new("TextLabel", frame)
+    label.Size = UDim2.new(1, -80, 1, 0)
+    label.Position = UDim2.new(0, 15, 0, 0)
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextColor3 = TEXT
+    label.Font = Enum.Font.Gotham
+    label.TextSize = 15
+    label.TextXAlignment = Enum.TextXAlignment.Left
 
-    local btn = Instance.new("TextButton", f)
-    btn.Size = UDim2.new(0, 50, 0, 22)
-    btn.Position = UDim2.new(1, -60, 0.5, -11)
-    btn.BackgroundColor3 = CONFIG[key] and RED or Color3.fromRGB(60,60,60)
+    local btn = Instance.new("TextButton", frame)
+    btn.Size = UDim2.new(0, 55, 0, 26)
+    btn.Position = UDim2.new(1, -70, 0.5, -13)
+    btn.BackgroundColor3 = CONFIG[key] and RED or Color3.fromRGB(70,70,70)
     btn.Text = CONFIG[key] and "ON" or "OFF"
     btn.TextColor3 = TEXT
-    Instance.new("UICorner", btn)
+    btn.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
 
     btn.MouseButton1Click:Connect(function()
         CONFIG[key] = not CONFIG[key]
         btn.Text = CONFIG[key] and "ON" or "OFF"
-        btn.BackgroundColor3 = CONFIG[key] and RED or Color3.fromRGB(60,60,60)
+        btn.BackgroundColor3 = CONFIG[key] and RED or Color3.fromRGB(70,70,70)
     end)
 end
 
--- Toggles novos
-makeToggle("Auto Coletar Fazenda", "AutoCollectFarm")
-makeToggle("Auto Puxar Ouro", "AutoPullGold")
-makeToggle("Auto Build", "AutoBuild")
-makeToggle("Auto Assign Workers", "AutoAssignWorkers")
-makeToggle("Auto Sell", "AutoSell")
+makeToggle("Coleta Automática (Fazenda)", "AutoCollectFarm")
+makeToggle("Puxar Ouro / Recursos", "AutoPullGold")
+makeToggle("Auto Construir", "AutoBuild")
+makeToggle("Auto Atribuir Trabalhadores", "AutoAssignWorkers")
+makeToggle("Auto Vender", "AutoSell")
 
--- Botão manual
-local runBtn = Instance.new("TextButton", body) -- ... (manter igual)
+-- Botão Manual
+local runBtn = Instance.new("TextButton", body)
+runBtn.Size = UDim2.new(1, 0, 0, 45)
+runBtn.BackgroundColor3 = RED
+runBtn.Text = "▶ EXECUTAR TUDO AGORA"
+runBtn.TextColor3 = TEXT
+runBtn.Font = Enum.Font.GothamBold
+runBtn.TextSize = 15
+Instance.new("UICorner", runBtn).CornerRadius = UDim.new(0, 8)
+
 runBtn.MouseButton1Click:Connect(function()
     AutoCollectFarm()
     AutoPullGold()
     AutoBuild()
     AutoAssignWorkers()
     AutoSell()
+end)
+
+-- Footer
+local footer = Instance.new("TextLabel", main)
+footer.Position = UDim2.new(0, 0, 1, -28)
+footer.Size = UDim2.new(1, 0, 0, 25)
+footer.BackgroundTransparency = 1
+footer.Text = "Pressione K para abrir/fechar • Renan.mod"
+footer.TextColor3 = Color3.fromRGB(160,160,160)
+footer.Font = Enum.Font.Gotham
+footer.TextSize = 12
+
+-- Controles
+local visible = true
+closeBtn.MouseButton1Click:Connect(function() gui:Destroy() end)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.KeyCode == Enum.KeyCode.K then
+        visible = not visible
+        main.Visible = visible
+    end
 end)
 
 -- ================== LOOP PRINCIPAL ==================
@@ -191,13 +240,12 @@ task.spawn(function()
             AutoBuild()
             AutoAssignWorkers()
         end)
+        task.wait(1.4)
         
-        task.wait(1.5)
-        
-        if tick() % CONFIG.SellDelay < 2 then
+        if math.floor(tick()) % CONFIG.SellDelay == 0 then
             pcall(AutoSell)
         end
     end
 end)
 
-print("✅ RENAN.mod | Tiny Empires carregado! Pressione K para abrir/fechar.")
+print("🚀 RENAN.mod | Pequenos Impérios carregado com sucesso! Pressione K")
